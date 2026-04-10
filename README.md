@@ -1,12 +1,5 @@
-**WebcamControl**
 
-Documentación técnica completa
-
-*Control, presets y captura de webcam en Windows*
-
- 
-
-# **1\. Visión general del proyecto**
+# **\. Visión general del proyecto**
 
 WebcamControl es una aplicación de escritorio escrita en Python que te permite controlar los parámetros de imagen de tu webcam, guardar configuraciones como presets, ver la imagen en tiempo real y tomar fotos directamente desde la interfaz.
 
@@ -24,10 +17,10 @@ WebcamControl es una aplicación de escritorio escrita en Python que te permite 
 
 * .vscode/settings.json — Configuración de VSCode para activar el entorno solo
 
-| 💡 El único archivo que necesitas ejecutar es ui\_webcam.py. El resto se gestiona solo. |
+| El único archivo que necesitas ejecutar es ui\_webcam.py. El resto se gestiona solo. |
 | :---- |
 
-# **2\. Dependencias y tecnologías usadas**
+# **\. Dependencias y tecnologías usadas**
 
 El programa usa exclusivamente librerías estándar de Python más OpenCV. No necesita nada externo una vez instalado el entorno.
 
@@ -40,11 +33,11 @@ El programa usa exclusivamente librerías estándar de Python más OpenCV. No ne
 | os | (estándar Python) | Gestionar rutas de archivos y carpetas |
 | datetime | (estándar Python) | Generar nombres únicos con marca de tiempo para las fotos |
 
-# **3\. Estructura del código**
+# **\. Estructura del código**
 
 El código está organizado en una clase principal y dos diccionarios de constantes globales.
 
-## **3.1 Constantes globales (fuera de la clase)**
+## ** Constantes globales (fuera de la clase)**
 
 ### **PROPS\_PRESET**
 
@@ -67,7 +60,7 @@ Diccionario con los 19 parámetros de cámara que se guardan en cada preset. La 
 
 Subconjunto de solo 5 parámetros que se muestran en pantalla. Mantener la UI limpia y no colapsar la ventana con los 19 parámetros completos.
 
-## **3.2 La clase WebcamApp**
+## ** La clase WebcamApp**
 
 Toda la lógica vive dentro de esta clase. Se instancia una sola vez al arrancar el programa.
 
@@ -85,11 +78,11 @@ Toda la lógica vive dentro de esta clase. Se instancia una sola vez al arrancar
 | guardar() | Lee los 19 valores de PROPS\_PRESET y los escribe en presets.json |
 | cargar() | Lee presets.json y aplica cada valor a la cámara, omitiendo los no soportados (-1) |
 
-# **4\. Cómo funciona el preview en tiempo real**
+# **\. Cómo funciona el preview en tiempo real**
 
 El preview fue el reto más delicado del proyecto. En Windows, OpenCV no puede mostrar imágenes desde un hilo secundario de forma fiable (conflicto con DirectShow). La solución usa dos hilos con responsabilidades separadas:
 
-| 🧵 Regla de oro: solo el hilo principal puede actualizar la UI. El hilo secundario solo toca datos. |
+| Regla de oro: solo el hilo principal puede actualizar la UI. El hilo secundario solo toca datos. |
 | :---- |
 
 ## **Hilo secundario — \_loop\_preview()**
@@ -123,10 +116,10 @@ Usa root.after(30, ...) para programarse a sí mismo cada 30 ms (\~33 fps). Cada
 |         cv2.destroyAllWindows()  \# cierra la ventana al parar |
 |   |
 
-| 💡 root.after(30, función) es como un setTimeout en JavaScript: ejecuta la función después de 30 ms en el hilo principal. Es la forma correcta de hacer loops en Tkinter. |
+| root.after(30, función) es como un setTimeout en JavaScript: ejecuta la función después de 30 ms en el hilo principal. Es la forma correcta de hacer loops en Tkinter. |
 | :---- |
 
-# **5\. Sistema de presets**
+# **\. Sistema de presets**
 
 ## **Estructura del archivo presets.json**
 
@@ -165,10 +158,10 @@ Cuando una propiedad no está soportada por tu cámara, OpenCV devuelve \-1. Se 
 |     aplicados \+= 1 |
 |   |
 
-| ✅ Esto hace que los presets sean portables entre cámaras: si cargas un preset en otra webcam, simplemente se omiten las propiedades que esa cámara no tenga. |
+| Esto hace que los presets sean portables entre cámaras: si cargas un preset en otra webcam, simplemente se omiten las propiedades que esa cámara no tenga. |
 | :---- |
 
-# **6\. Captura de fotos**
+# **\. Captura de fotos**
 
 El botón 📷 Tomar Foto funciona en dos modos dependiendo de si el preview está activo:
 
@@ -187,7 +180,7 @@ Las fotos se guardan con timestamp para evitar colisiones de nombre:
 
 La carpeta por defecto es Fotos/ dentro del directorio del proyecto. El botón **Cambiar** abre el explorador de Windows para elegir cualquier otra ruta.
 
-# **7\. Compatibilidad con webcams**
+# **\. Compatibilidad con webcams**
 
 El programa funciona con cualquier webcam estándar en Windows. La clave está en el flag cv2.CAP\_DSHOW:
 
@@ -212,7 +205,7 @@ El programa funciona con cualquier webcam estándar en Windows. La clave está e
 | Auto\_Exposicion | 0.25 \= manual, 0.75 \= auto | Fijar en manual para que los presets funcionen bien |
 | Auto\_Foco | 0 \= manual, 1 \= automático | Desactivar para que el foco guardado se respete |
 
-| ⚠️ Importante: para que los presets funcionen correctamente, Auto\_Exposicion y Auto\_Foco deben estar en modo manual (0.25 y 0 respectivamente). El programa los fija así al arrancar. |
+| Importante: para que los presets funcionen correctamente, Auto\_Exposicion y Auto\_Foco deben estar en modo manual (0.25 y 0 respectivamente). El programa los fija así al arrancar. |
 | :---- |
 
 # **8\. Entorno virtual y VSCode**
@@ -254,7 +247,7 @@ El archivo .vscode/settings.json configura VSCode para activar el entorno cada v
 | } |
 |   |
 
-# **9\. Crear un ejecutable .exe para Windows**
+# **\. Crear un ejecutable .exe para Windows**
 
 Con PyInstaller puedes empaquetar todo el proyecto en un único .exe que funciona en cualquier Windows sin necesidad de tener Python instalado.
 
@@ -281,7 +274,7 @@ Con PyInstaller puedes empaquetar todo el proyecto en un único .exe que funcion
 
 * El .exe aparece en la carpeta dist/ dentro de tu proyecto
 
-| 📁 Resultado: F:\\WebcamControl\\dist\\ui\_webcam.exe — cópialo a cualquier Windows y funciona. No necesita Python, ni librerías, ni nada instalado. |
+| Resultado: F:\\WebcamControl\\dist\\ui\_webcam.exe — cópialo a cualquier Windows y funciona. No necesita Python, ni librerías, ni nada instalado. |
 | :---- |
 
 ## **Notas sobre el ejecutable**
@@ -294,7 +287,7 @@ Con PyInstaller puedes empaquetar todo el proyecto en un único .exe que funcion
 
 * El presets.json y la carpeta Fotos/ se crean junto al .exe cuando lo uses por primera vez.
 
-# **10\. Referencia rápida de uso**
+# **\. Referencia rápida de uso**
 
 | Acción | Cómo hacerlo |
 | :---- | :---- |
