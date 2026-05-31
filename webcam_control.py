@@ -1,3 +1,4 @@
+import sys
 import cv2
 import json
 import os
@@ -6,40 +7,42 @@ import customtkinter as ctk
 from tkinter import messagebox, filedialog
 from datetime import datetime
 
-# Tema principal
+# ── Tema ──────────────────────────────────────────────────────────
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
 
+IS_WINDOWS = sys.platform == "win32"
+
 # Parámetros que se guardan en cada preset (19 propiedades)
 PROPS_PRESET = {
-    "Brillo": cv2.CAP_PROP_BRIGHTNESS,
-    "Contraste": cv2.CAP_PROP_CONTRAST,
-    "Saturacion": cv2.CAP_PROP_SATURATION,
-    "Exposicion": cv2.CAP_PROP_EXPOSURE,
-    "Ganancia": cv2.CAP_PROP_GAIN,
-    "Foco": cv2.CAP_PROP_FOCUS,
-    "Zoom": cv2.CAP_PROP_ZOOM,
-    "Nitidez": cv2.CAP_PROP_SHARPNESS,
-    "Gamma": cv2.CAP_PROP_GAMMA,
-    "Tono": cv2.CAP_PROP_HUE,
-    "Contraluz": cv2.CAP_PROP_BACKLIGHT,
-    "Temp_Color": cv2.CAP_PROP_WHITE_BALANCE_BLUE_U,
-    "Auto_Exposicion": cv2.CAP_PROP_AUTO_EXPOSURE,
-    "Auto_Foco": cv2.CAP_PROP_AUTOFOCUS,
-    "Auto_WB": cv2.CAP_PROP_AUTO_WB,
-    "Pan": cv2.CAP_PROP_PAN,
-    "Tilt": cv2.CAP_PROP_TILT,
-    "Roll": cv2.CAP_PROP_ROLL,
-    "Iris": cv2.CAP_PROP_IRIS,
+    "Brillo":         cv2.CAP_PROP_BRIGHTNESS,
+    "Contraste":      cv2.CAP_PROP_CONTRAST,
+    "Saturacion":     cv2.CAP_PROP_SATURATION,
+    "Exposicion":     cv2.CAP_PROP_EXPOSURE,
+    "Ganancia":       cv2.CAP_PROP_GAIN,
+    "Foco":           cv2.CAP_PROP_FOCUS,
+    "Zoom":           cv2.CAP_PROP_ZOOM,
+    "Nitidez":        cv2.CAP_PROP_SHARPNESS,
+    "Gamma":          cv2.CAP_PROP_GAMMA,
+    "Tono":           cv2.CAP_PROP_HUE,
+    "Contraluz":      cv2.CAP_PROP_BACKLIGHT,
+    "Temp_Color":     cv2.CAP_PROP_WHITE_BALANCE_BLUE_U,
+    "Auto_Exposicion":cv2.CAP_PROP_AUTO_EXPOSURE,
+    "Auto_Foco":      cv2.CAP_PROP_AUTOFOCUS,
+    "Auto_WB":        cv2.CAP_PROP_AUTO_WB,
+    "Pan":            cv2.CAP_PROP_PAN,
+    "Tilt":           cv2.CAP_PROP_TILT,
+    "Roll":           cv2.CAP_PROP_ROLL,
+    "Iris":           cv2.CAP_PROP_IRIS,
 }
 
-# Parámetros visibles en la UI (solo los 5 más usados)
+# Parámetros visibles en la UI (los 5 más usados)
 PROPS_UI = {
-    "Brillo": cv2.CAP_PROP_BRIGHTNESS,
-    "Contraste": cv2.CAP_PROP_CONTRAST,
+    "Brillo":     cv2.CAP_PROP_BRIGHTNESS,
+    "Contraste":  cv2.CAP_PROP_CONTRAST,
     "Saturacion": cv2.CAP_PROP_SATURATION,
     "Exposicion": cv2.CAP_PROP_EXPOSURE,
-    "Ganancia": cv2.CAP_PROP_GAIN,
+    "Ganancia":   cv2.CAP_PROP_GAIN,
 }
 
 PRESETS_FILE = "presets.json"
@@ -52,8 +55,14 @@ class WebcamApp(ctk.CTk):
         self.geometry("720x620")
         self.resizable(False, False)
 
-        # Cámara
-        self.cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+        # Abrir cámara: CAP_DSHOW solo en Windows
+        backend = cv2.CAP_DSHOW if IS_WINDOWS else cv2.CAP_ANY
+        self.cap = cv2.VideoCapture(0, backend)
+        if not self.cap.isOpened():
+            messagebox.showerror("Error", "No se pudo abrir la cámara.")
+            self.destroy()
+            return
+
         self.cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 0.25)
         self.cap.set(cv2.CAP_PROP_AUTOFOCUS, 0)
 
@@ -61,6 +70,7 @@ class WebcamApp(ctk.CTk):
         self.preview_activo = False
         self.hilo_preview = None
         self._frame_actual = None
+        self._lock_frame = threading.Lock()   # protege _frame_actual entre hilos
         self.grabando = False
         self.video_writer = None
         self._ruta_video_actual = ""
@@ -72,6 +82,8 @@ class WebcamApp(ctk.CTk):
         self._refrescar_lista_presets()
         self.actualizar_labels()
         self.protocol("WM_DELETE_WINDOW", self._al_cerrar)
+
+    # ── UI ────────────────────────────────────────────────────────
 
     def _build_ui(self):
         self.grid_columnconfigure(0, weight=1)
@@ -86,25 +98,21 @@ class WebcamApp(ctk.CTk):
         ctk.CTkLabel(
             left, text="WebcamControl", font=ctk.CTkFont(size=20, weight="bold")
         ).grid(row=0, column=0, pady=(16, 2))
-
         ctk.CTkLabel(
             left, text="Panel de control", font=ctk.CTkFont(size=12), text_color="gray"
         ).grid(row=1, column=0, pady=(0, 10))
 
-        # Valores actuales
+        # Cuadro de valores actuales
         vf = ctk.CTkFrame(left, corner_radius=8)
         vf.grid(row=2, column=0, padx=12, pady=(0, 8), sticky="ew")
         vf.grid_columnconfigure(0, weight=1)
-
         ctk.CTkLabel(
             vf, text="Estado actual", font=ctk.CTkFont(size=12, weight="bold")
         ).grid(row=0, column=0, pady=(8, 4), padx=12, sticky="w")
 
         self.labels_dict = {}
         for i, nombre in enumerate(PROPS_UI.keys()):
-            lbl = ctk.CTkLabel(
-                vf, text=f"{nombre}: ---", font=ctk.CTkFont(size=12), anchor="w"
-            )
+            lbl = ctk.CTkLabel(vf, text=f"{nombre}: ---", font=ctk.CTkFont(size=12), anchor="w")
             lbl.grid(row=i + 1, column=0, padx=16, pady=1, sticky="w")
             self.labels_dict[nombre] = lbl
 
@@ -112,14 +120,16 @@ class WebcamApp(ctk.CTk):
             vf, text="Leer valores", command=self.actualizar_labels, height=30
         ).grid(row=len(PROPS_UI) + 1, column=0, padx=12, pady=(6, 10), sticky="ew")
 
-        ctk.CTkButton(
-            left,
-            text="Abrir configuración avanzada",
-            command=self.abrir_panel_nativo,
-            fg_color="transparent",
-            border_width=1,
-            height=32,
-        ).grid(row=3, column=0, padx=12, pady=(0, 6), sticky="ew")
+        # Botón configuración avanzada (solo Windows)
+        if IS_WINDOWS:
+            ctk.CTkButton(
+                left,
+                text="Abrir configuración avanzada",
+                command=self.abrir_panel_nativo,
+                fg_color="transparent",
+                border_width=1,
+                height=32,
+            ).grid(row=3, column=0, padx=12, pady=(0, 6), sticky="ew")
 
         self.btn_preview = ctk.CTkButton(
             left,
@@ -153,7 +163,6 @@ class WebcamApp(ctk.CTk):
             cr, text="Fotos/", font=ctk.CTkFont(size=11), text_color="gray", anchor="w"
         )
         self.lbl_carpeta.grid(row=0, column=0, sticky="w")
-
         ctk.CTkButton(
             cr, text="Cambiar", width=70, height=26, command=self.elegir_carpeta
         ).grid(row=0, column=1, padx=(6, 0))
@@ -177,7 +186,6 @@ class WebcamApp(ctk.CTk):
         ctk.CTkLabel(
             right, text="Presets", font=ctk.CTkFont(size=20, weight="bold")
         ).grid(row=0, column=0, pady=(16, 2))
-
         ctk.CTkLabel(
             right,
             text="Clic para cargar  ·  × para borrar",
@@ -193,9 +201,7 @@ class WebcamApp(ctk.CTk):
         bot.grid(row=3, column=0, padx=12, pady=(0, 16), sticky="ew")
         bot.grid_columnconfigure(0, weight=1)
 
-        self.entry_nombre = ctk.CTkEntry(
-            bot, placeholder_text="Nombre del preset...", height=36
-        )
+        self.entry_nombre = ctk.CTkEntry(bot, placeholder_text="Nombre del preset...", height=36)
         self.entry_nombre.grid(row=0, column=0, sticky="ew", pady=(0, 6))
 
         ctk.CTkButton(
@@ -205,6 +211,8 @@ class WebcamApp(ctk.CTk):
             height=36,
             font=ctk.CTkFont(size=13, weight="bold"),
         ).grid(row=1, column=0, sticky="ew")
+
+    # ── Presets ───────────────────────────────────────────────────
 
     def _refrescar_lista_presets(self):
         for w in self.lista_frame.winfo_children():
@@ -218,13 +226,11 @@ class WebcamApp(ctk.CTk):
                 font=ctk.CTkFont(size=12),
             ).pack(pady=20)
             return
-
         for nombre in presets:
             fila = ctk.CTkFrame(self.lista_frame, corner_radius=8, height=40)
             fila.pack(fill="x", pady=3, padx=2)
             fila.pack_propagate(False)
             fila.grid_columnconfigure(0, weight=1)
-
             ctk.CTkButton(
                 fila,
                 text=nombre,
@@ -234,7 +240,6 @@ class WebcamApp(ctk.CTk):
                 font=ctk.CTkFont(size=13),
                 command=lambda n=nombre: self._cargar_preset(n),
             ).grid(row=0, column=0, sticky="ew", padx=(6, 0), pady=2)
-
             ctk.CTkButton(
                 fila,
                 text="×",
@@ -272,7 +277,7 @@ class WebcamApp(ctk.CTk):
         self.actualizar_labels()
         messagebox.showinfo(
             "Preset cargado",
-            (f"'{nombre}' aplicado\n" f"{aplicados} parámetros · {omitidos} omitidos"),
+            f"'{nombre}' aplicado\n{aplicados} parámetros · {omitidos} omitidos",
         )
 
     def _borrar_preset(self, nombre):
@@ -283,6 +288,8 @@ class WebcamApp(ctk.CTk):
         with open(PRESETS_FILE, "w") as f:
             json.dump(presets, f, indent=4)
         self._refrescar_lista_presets()
+
+    # ── Preview ───────────────────────────────────────────────────
 
     def toggle_preview(self):
         if not self.preview_activo:
@@ -303,43 +310,40 @@ class WebcamApp(ctk.CTk):
             )
 
     def _loop_preview(self):
+        """Hilo secundario: solo captura frames, nunca llama a cv2.waitKey."""
         while self.preview_activo:
             ret, frame = self.cap.read()
             if ret:
-                self._frame_actual = frame
+                with self._lock_frame:
+                    self._frame_actual = frame
                 if self.grabando and self.video_writer:
                     self.video_writer.write(frame)
-            if cv2.waitKey(1) & 0xFF == ord("q"):
-                self.preview_activo = False
-                self.after(
-                    0,
-                    lambda: self.btn_preview.configure(
-                        text="▶  Iniciar preview",
-                        fg_color=("#3a7ebf", "#1f538d"),
-                        hover_color=("#325882", "#14375e"),
-                    ),
-                )
-                break
 
     def _actualizar_preview(self):
+        """Hilo principal (via after): muestra el frame y gestiona waitKey."""
         if self.preview_activo:
-            if self._frame_actual is not None:
-                frame = self._frame_actual.copy()
+            with self._lock_frame:
+                frame = self._frame_actual.copy() if self._frame_actual is not None else None
+            if frame is not None:
                 if self.grabando:
                     cv2.circle(frame, (20, 20), 8, (0, 0, 220), -1)
                 cv2.imshow("Webcam Control Live View", frame)
+            # waitKey en el hilo principal: detecta 'q' para cerrar preview
+            if cv2.waitKey(1) & 0xFF == ord("q"):
+                self.toggle_preview()
+                return
             self.after(30, self._actualizar_preview)
         else:
             if self.grabando:
                 self._detener_grabacion()
             cv2.destroyAllWindows()
 
+    # ── Grabación ─────────────────────────────────────────────────
+
     def toggle_grabacion(self):
         if not self.grabando:
             if not self.preview_activo:
-                messagebox.showwarning(
-                    "Atención", "Activa el preview primero para poder grabar."
-                )
+                messagebox.showwarning("Atención", "Activa el preview primero para poder grabar.")
                 return
             self._iniciar_grabacion()
         else:
@@ -355,21 +359,17 @@ class WebcamApp(ctk.CTk):
         self.video_writer = cv2.VideoWriter(ruta, fourcc, 20.0, (w, h))
         self.grabando = True
         self._ruta_video_actual = ruta
-        self.btn_rec.configure(
-            text="⏹  Detener grabación", fg_color="#cc0000", hover_color="#990000"
-        )
+        self.btn_rec.configure(text="⏹  Detener grabación", fg_color="#cc0000", hover_color="#990000")
 
     def _detener_grabacion(self):
         self.grabando = False
         if self.video_writer:
             self.video_writer.release()
             self.video_writer = None
-        self.btn_rec.configure(
-            text="⏺  Iniciar grabación", fg_color="#8B0000", hover_color="#6B0000"
-        )
-        messagebox.showinfo(
-            "Grabación guardada", f"Video guardado en:\n{self._ruta_video_actual}"
-        )
+        self.btn_rec.configure(text="⏺  Iniciar grabación", fg_color="#8B0000", hover_color="#6B0000")
+        messagebox.showinfo("Grabación guardada", f"Video guardado en:\n{self._ruta_video_actual}")
+
+    # ── Foto ──────────────────────────────────────────────────────
 
     def elegir_carpeta(self):
         nueva = filedialog.askdirectory(title="Carpeta para fotos y videos")
@@ -378,9 +378,9 @@ class WebcamApp(ctk.CTk):
             self.lbl_carpeta.configure(text=nueva, text_color="white")
 
     def tomar_foto(self):
-        if self._frame_actual is not None:
-            frame = self._frame_actual.copy()
-        else:
+        with self._lock_frame:
+            frame = self._frame_actual.copy() if self._frame_actual is not None else None
+        if frame is None:
             ret, frame = self.cap.read()
             if not ret:
                 messagebox.showerror("Error", "No se pudo capturar imagen")
@@ -391,6 +391,8 @@ class WebcamApp(ctk.CTk):
         cv2.imwrite(ruta, frame)
         messagebox.showinfo("Foto guardada", f"Guardada en:\n{ruta}")
 
+    # ── Misc ──────────────────────────────────────────────────────
+
     def actualizar_labels(self):
         self.cap.grab()
         for nombre, prop_id in PROPS_UI.items():
@@ -399,6 +401,7 @@ class WebcamApp(ctk.CTk):
             self.labels_dict[nombre].configure(text=f"{nombre}: {texto}")
 
     def abrir_panel_nativo(self):
+        """Abre el panel DirectShow de Windows (solo disponible en Windows)."""
         self.cap.set(cv2.CAP_PROP_SETTINGS, 1)
 
     def guardar(self):
@@ -414,10 +417,7 @@ class WebcamApp(ctk.CTk):
             json.dump(presets, f, indent=4)
         self.entry_nombre.delete(0, "end")
         self._refrescar_lista_presets()
-        messagebox.showinfo(
-            "Guardado",
-            (f"Preset '{nombre}' guardado" f" con {len(actuales)} parámetros"),
-        )
+        messagebox.showinfo("Guardado", f"Preset '{nombre}' guardado con {len(actuales)} parámetros")
 
     def _al_cerrar(self):
         if self.grabando:
