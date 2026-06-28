@@ -7,9 +7,11 @@ REQS        = requirements.txt
 ifeq ($(OS),Windows_NT)
     PYTHON  = $(VENV)/Scripts/python
     PIP     = $(VENV)/Scripts/pip
+    RUFF    = $(VENV)/Scripts/ruff
 else
     PYTHON  = $(VENV)/bin/python3
     PIP     = $(VENV)/bin/pip
+    RUFF    = $(VENV)/bin/ruff
 endif
 
 # ══════════════════════════════════════════════════════════════════
@@ -39,7 +41,19 @@ clean:
 	find . -name "*.pyc" -delete
 	rm -rf $(VENV)
 
+# Ejecuta el linter
+lint: venv
+	$(PIP) install -q ruff
+	$(RUFF) check $(MAIN)
+	$(RUFF) format --check $(MAIN)
+
+# Aplica formato automático
+fmt: venv
+	$(PIP) install -q ruff
+	$(RUFF) format $(MAIN)
+	$(RUFF) check --fix $(MAIN)
+
 # Reinicia desde cero
 re: clean all
 
-.PHONY: all venv install run clean re
+.PHONY: all venv install run clean re lint fmt
