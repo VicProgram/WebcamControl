@@ -53,7 +53,12 @@ fmt: venv
 	$(RUFF) format $(MAIN)
 	$(RUFF) check --fix $(MAIN)
 
+# Ejecuta los tests
+test: venv
+	$(PIP) install -q pytest pytest-mock
+	$(PYTHON) -m pytest tests/ -v --tb=short
+
 # Reinicia desde cero
 re: clean all
 
-.PHONY: all venv install run clean re lint fmt
+.PHONY: all venv install run clean re lint fmt test
