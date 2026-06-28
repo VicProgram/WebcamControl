@@ -3,6 +3,14 @@ name = "webcamcontrol"
 version = "1.0.0"
 requires-python = ">=3.10"
 
+[project.dependencies]
+opencv-python = ">=4.8.0"
+customtkinter = ">=5.2.0"
+Pillow = ">=10.0.0"
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "pytest-mock>=3.14", "ruff>=0.15.0"]
+
 [tool.ruff]
 line-length = 100
 target-version = "py310"

@@ -10,6 +10,7 @@ from tkinter import filedialog, messagebox
 import customtkinter as ctk
 import cv2
 import numpy as np
+from PIL import Image
 
 # ── Tema ──────────────────────────────────────────────────────────
 ctk.set_appearance_mode("dark")
@@ -79,6 +80,7 @@ class WebcamApp(ctk.CTk):
     labels_dict: dict[str, ctk.CTkLabel]
     sliders_dict: dict[str, ctk.CTkSlider]
     _updating_sliders: bool
+    preview_label: ctk.CTkLabel
     lista_frame: ctk.CTkScrollableFrame
     btn_preview: ctk.CTkButton
     btn_rec: ctk.CTkButton
@@ -129,7 +131,7 @@ class WebcamApp(ctk.CTk):
         left = ctk.CTkFrame(self, corner_radius=12)
         left.grid(row=0, column=0, padx=(16, 8), pady=16, sticky="nsew")
         left.grid_columnconfigure(0, weight=1)
-        left.grid_rowconfigure(2, weight=1)
+        left.grid_rowconfigure(3, weight=1)
 
         ctk.CTkLabel(left, text="WebcamControl", font=ctk.CTkFont(size=20, weight="bold")).grid(
             row=0, column=0, pady=(16, 2)
@@ -138,9 +140,19 @@ class WebcamApp(ctk.CTk):
             left, text="Panel de control", font=ctk.CTkFont(size=12), text_color="gray"
         ).grid(row=1, column=0, pady=(0, 10))
 
+        # Label de preview (se actualiza con CTkImage cuando el preview está activo)
+        self.preview_label = ctk.CTkLabel(
+            left,
+            text="Preview desactivado",
+            font=ctk.CTkFont(size=12),
+            anchor="center",
+        )
+        self.preview_label.grid(row=2, column=0, padx=12, pady=(0, 8), sticky="nsew")
+        self.preview_label.configure(height=200)
+
         # Cuadro de valores actuales
         vf = ctk.CTkFrame(left, corner_radius=8)
-        vf.grid(row=2, column=0, padx=12, pady=(0, 8), sticky="nsew")
+        vf.grid(row=3, column=0, padx=12, pady=(0, 8), sticky="nsew")
         vf.grid_columnconfigure(0, weight=1)
         ctk.CTkLabel(vf, text="Estado actual", font=ctk.CTkFont(size=12, weight="bold")).grid(
             row=0, column=0, pady=(8, 4), padx=12, sticky="w"
@@ -187,7 +199,7 @@ class WebcamApp(ctk.CTk):
                 fg_color="transparent",
                 border_width=1,
                 height=32,
-            ).grid(row=3, column=0, padx=12, pady=(0, 6), sticky="ew")
+            ).grid(row=4, column=0, padx=12, pady=(0, 6), sticky="ew")
 
         self.btn_preview = ctk.CTkButton(
             left,
@@ -196,7 +208,7 @@ class WebcamApp(ctk.CTk):
             height=36,
             font=ctk.CTkFont(size=13, weight="bold"),
         )
-        self.btn_preview.grid(row=4, column=0, padx=12, pady=(0, 6), sticky="ew")
+        self.btn_preview.grid(row=5, column=0, padx=12, pady=(0, 6), sticky="ew")
 
         self.btn_rec = ctk.CTkButton(
             left,
@@ -207,14 +219,14 @@ class WebcamApp(ctk.CTk):
             hover_color="#6B0000",
             font=ctk.CTkFont(size=13, weight="bold"),
         )
-        self.btn_rec.grid(row=5, column=0, padx=12, pady=(0, 12), sticky="ew")
+        self.btn_rec.grid(row=6, column=0, padx=12, pady=(0, 12), sticky="ew")
 
         ctk.CTkLabel(left, text="Captura de foto", font=ctk.CTkFont(size=13, weight="bold")).grid(
-            row=6, column=0, padx=12, pady=(4, 4), sticky="w"
+            row=7, column=0, padx=12, pady=(4, 4), sticky="w"
         )
 
         cr = ctk.CTkFrame(left, fg_color="transparent")
-        cr.grid(row=7, column=0, padx=12, pady=(0, 6), sticky="ew")
+        cr.grid(row=8, column=0, padx=12, pady=(0, 6), sticky="ew")
         cr.grid_columnconfigure(0, weight=1)
 
         self.lbl_carpeta = ctk.CTkLabel(
@@ -233,7 +245,7 @@ class WebcamApp(ctk.CTk):
             fg_color="#1a5c38",
             hover_color="#144a2d",
             font=ctk.CTkFont(size=13, weight="bold"),
-        ).grid(row=8, column=0, padx=12, pady=(0, 16), sticky="ew")
+        ).grid(row=9, column=0, padx=12, pady=(0, 16), sticky="ew")
 
         # Columna derecha: presets
         right = ctk.CTkFrame(self, corner_radius=12)
@@ -389,23 +401,24 @@ class WebcamApp(ctk.CTk):
                     self.video_writer.write(frame)
 
     def _actualizar_preview(self) -> None:
-        """Hilo principal (via after): muestra el frame y gestiona waitKey."""
+        """Hilo principal (via after): convierte el frame a CTkImage y actualiza el label."""
         if self.preview_activo:
             with self._lock_frame:
                 frame = self._frame_actual.copy() if self._frame_actual is not None else None
             if frame is not None:
                 if self.grabando:
                     cv2.circle(frame, (20, 20), 8, (0, 0, 220), -1)
-                cv2.imshow("Webcam Control Live View", frame)
-            # waitKey en el hilo principal: detecta 'q' para cerrar preview
-            if cv2.waitKey(1) & 0xFF == ord("q"):
-                self.toggle_preview()
-                return
+                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                pil_image = Image.fromarray(frame_rgb)
+                ctk_image = ctk.CTkImage(
+                    light_image=pil_image, dark_image=pil_image, size=(320, 240)
+                )
+                self.preview_label.configure(image=ctk_image, text="")
             self.after(30, self._actualizar_preview)
         else:
+            self.preview_label.configure(image=None, text="Preview desactivado")
             if self.grabando:
                 self._detener_grabacion()
-            cv2.destroyAllWindows()
 
     # ── Grabación ─────────────────────────────────────────────────
 

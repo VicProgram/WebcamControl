@@ -154,8 +154,7 @@ def mock_gui(mocker) -> dict[str, MagicMock]:
     mocker.patch("tkinter.messagebox.showinfo")
     mocker.patch("tkinter.messagebox.askyesno", return_value=True)
 
-    mocker.patch("cv2.imshow")
-    mocker.patch("cv2.waitKey", return_value=0)
+    mocker.patch("customtkinter.CTkImage", return_value=MagicMock())
     mocker.patch("cv2.destroyAllWindows")
     mocker.patch("cv2.imwrite", return_value=True)
 

@@ -175,12 +175,13 @@ class TestPreview:
         app.cap.read.assert_called()
 
     def test_actualizar_preview_muestra_frame(self, app, mocker) -> None:
-        mock_imshow = mocker.patch("cv2.imshow")
         app.preview_activo = True
         with app._lock_frame:
             app._frame_actual = np.zeros((100, 100, 3), dtype=np.uint8)
         app._actualizar_preview()
-        mock_imshow.assert_called_once()
+        app.preview_label.configure.assert_called()
+        args, kwargs = app.preview_label.configure.call_args
+        assert "image" in kwargs
 
     def test_actualizar_preview_con_grabacion_pinta_circulo(self, app, mocker) -> None:
         mock_circle = mocker.patch("cv2.circle")
@@ -192,18 +193,10 @@ class TestPreview:
         mock_circle.assert_called_once()
 
     def test_actualizar_preview_con_frame_none_no_crashea(self, app, mocker) -> None:
-        mock_imshow = mocker.patch("cv2.imshow")
         app.preview_activo = True
         with app._lock_frame:
             app._frame_actual = None
-        app._actualizar_preview()
-        mock_imshow.assert_not_called()
-
-    def test_actualizar_preview_detecta_q_cierra(self, app, mocker) -> None:
-        mocker.patch("cv2.waitKey", return_value=ord("q"))
-        app.preview_activo = True
-        app._actualizar_preview()
-        assert app.preview_activo is False
+        app._actualizar_preview()  # should not raise
 
     def test_loop_preview_escribe_frame_si_grabando(self, app, mocker) -> None:
         app.grabando = True
@@ -217,11 +210,10 @@ class TestPreview:
         t.join(timeout=2)
         mock_writer.write.assert_called()
 
-    def test_actualizar_preview_sin_activo_cierra_ventanas(self, app, mocker) -> None:
-        mock_destroy = mocker.patch("cv2.destroyAllWindows")
+    def test_actualizar_preview_sin_activo_limpia_label(self, app, mocker) -> None:
         app.preview_activo = False
         app._actualizar_preview()
-        mock_destroy.assert_called_once()
+        app.preview_label.configure.assert_called_with(image=None, text="Preview desactivado")
 
     def test_actualizar_preview_sin_activo_detiene_grabacion(self, app, mocker) -> None:
         app.preview_activo = False
