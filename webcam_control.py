@@ -21,7 +21,7 @@ IS_WINDOWS: bool = sys.platform == "win32"
 PROPS_PRESET: dict[str, int] = {
     "Brillo": cv2.CAP_PROP_BRIGHTNESS,
     "Contraste": cv2.CAP_PROP_CONTRAST,
-    "Saturacion": cv2.CAP_PROP_SATURATION,
+    "Saturación": cv2.CAP_PROP_SATURATION,
     "Exposicion": cv2.CAP_PROP_EXPOSURE,
     "Ganancia": cv2.CAP_PROP_GAIN,
     "Foco": cv2.CAP_PROP_FOCUS,
@@ -44,9 +44,18 @@ PROPS_PRESET: dict[str, int] = {
 PROPS_UI: dict[str, int] = {
     "Brillo": cv2.CAP_PROP_BRIGHTNESS,
     "Contraste": cv2.CAP_PROP_CONTRAST,
-    "Saturacion": cv2.CAP_PROP_SATURATION,
+    "Saturación": cv2.CAP_PROP_SATURATION,
     "Exposicion": cv2.CAP_PROP_EXPOSURE,
     "Ganancia": cv2.CAP_PROP_GAIN,
+}
+
+# Rangos por defecto para los sliders de la UI
+SLIDER_RANGES: dict[str, tuple[float, float]] = {
+    "Brillo": (0.0, 255.0),
+    "Contraste": (0.0, 255.0),
+    "Saturación": (0.0, 255.0),
+    "Exposicion": (-13.0, -1.0),
+    "Ganancia": (0.0, 255.0),
 }
 
 PRESETS_FILE: str = "presets.json"
@@ -68,6 +77,8 @@ class WebcamApp(ctk.CTk):
     carpeta_fotos: str
     # widgets (inicializados en _build_ui)
     labels_dict: dict[str, ctk.CTkLabel]
+    sliders_dict: dict[str, ctk.CTkSlider]
+    _updating_sliders: bool
     lista_frame: ctk.CTkScrollableFrame
     btn_preview: ctk.CTkButton
     btn_rec: ctk.CTkButton
@@ -136,10 +147,31 @@ class WebcamApp(ctk.CTk):
         )
 
         self.labels_dict = {}
+        self.sliders_dict = {}
+        self._updating_sliders = False
         for i, nombre in enumerate(PROPS_UI.keys()):
-            lbl = ctk.CTkLabel(vf, text=f"{nombre}: ---", font=ctk.CTkFont(size=12), anchor="w")
-            lbl.grid(row=i + 1, column=0, padx=16, pady=1, sticky="w")
-            self.labels_dict[nombre] = lbl
+            row = ctk.CTkFrame(vf, fg_color="transparent")
+            row.grid(row=i + 1, column=0, padx=16, pady=2, sticky="ew")
+            row.grid_columnconfigure(1, weight=1)
+
+            ctk.CTkLabel(
+                row, text=f"{nombre}:", font=ctk.CTkFont(size=12), anchor="w", width=80
+            ).grid(row=0, column=0, sticky="w")
+
+            slider = ctk.CTkSlider(
+                row,
+                from_=SLIDER_RANGES[nombre][0],
+                to=SLIDER_RANGES[nombre][1],
+                number_of_steps=200,
+                command=lambda v, n=nombre: self._on_slider_change(n, v),
+            )
+            slider.grid(row=0, column=1, sticky="ew", padx=(4, 4))
+
+            val_lbl = ctk.CTkLabel(row, text="---", font=ctk.CTkFont(size=12), anchor="e", width=55)
+            val_lbl.grid(row=0, column=2, sticky="e")
+
+            self.labels_dict[nombre] = val_lbl
+            self.sliders_dict[nombre] = slider
 
         vf.grid_rowconfigure(len(PROPS_UI) + 1, weight=1)
         ctk.CTkButton(vf, text="Leer valores", command=self.actualizar_labels, height=30).grid(
@@ -237,6 +269,17 @@ class WebcamApp(ctk.CTk):
             height=36,
             font=ctk.CTkFont(size=13, weight="bold"),
         ).grid(row=1, column=0, sticky="ew")
+
+    # ── Sliders ──────────────────────────────────────────────────
+
+    def _on_slider_change(self, nombre: str, value: float) -> None:
+        if self._updating_sliders:
+            return
+        prop_id = PROPS_UI.get(nombre)
+        if prop_id is not None:
+            self.cap.set(prop_id, value)
+            texto = f"{value:.1f}" if value != -1 else "No soportado"
+            self.labels_dict[nombre].configure(text=texto)
 
     # ── Presets ───────────────────────────────────────────────────
 
@@ -425,10 +468,16 @@ class WebcamApp(ctk.CTk):
 
     def actualizar_labels(self) -> None:
         self.cap.grab()
+        self._updating_sliders = True
         for nombre, prop_id in PROPS_UI.items():
             val = self.cap.get(prop_id)
             texto = f"{val:.1f}" if val != -1 else "No soportado"
-            self.labels_dict[nombre].configure(text=f"{nombre}: {texto}")
+            self.labels_dict[nombre].configure(text=texto)
+            if val != -1:
+                rmin, rmax = SLIDER_RANGES[nombre]
+                clamped = max(rmin, min(rmax, val))
+                self.sliders_dict[nombre].set(clamped)
+        self._updating_sliders = False
 
     def abrir_panel_nativo(self) -> None:
         """Abre el panel DirectShow de Windows (solo disponible en Windows)."""

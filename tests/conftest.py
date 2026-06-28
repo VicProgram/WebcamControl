@@ -121,9 +121,13 @@ def mock_gui(mocker) -> dict[str, MagicMock]:
 
     btn_mock = MagicMock()
     label_mock = MagicMock()
+    slider_mock = MagicMock()
 
     label_mock.configure.return_value = None
     btn_mock.configure.return_value = None
+    slider_mock.grid.return_value = None
+    slider_mock.set.return_value = None
+    slider_mock.get.return_value = 0.0
 
     scrollable_mock = MagicMock()
     scrollable_mock.winfo_children.return_value = []
@@ -140,6 +144,7 @@ def mock_gui(mocker) -> dict[str, MagicMock]:
     mocker.patch("customtkinter.CTkFrame", return_value=frame_mock)
     mocker.patch("customtkinter.CTkLabel", return_value=label_mock)
     mocker.patch("customtkinter.CTkButton", return_value=btn_mock)
+    mocker.patch("customtkinter.CTkSlider", return_value=slider_mock)
     mocker.patch("customtkinter.CTkEntry", return_value=MagicMock())
     mocker.patch("customtkinter.CTkScrollableFrame", return_value=scrollable_mock)
     mocker.patch("customtkinter.CTkFont", return_value=MagicMock())
@@ -157,6 +162,7 @@ def mock_gui(mocker) -> dict[str, MagicMock]:
     return {
         "btn_mock": btn_mock,
         "label_mock": label_mock,
+        "slider_mock": slider_mock,
         "scrollable_mock": scrollable_mock,
         "frame_mock": frame_mock,
     }

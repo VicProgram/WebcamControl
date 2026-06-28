@@ -2,7 +2,7 @@
     "Normal": {
         "Brillo": 0.0,
         "Contraste": 15.0,
-        "Saturacion": 10.0,
+        "Saturación": 10.0,
         "Exposicion": -4.0,
         "Ganancia": 32.0,
         "Foco": -1.0,
@@ -23,7 +23,7 @@
     "Green": {
         "Brillo": 4.0,
         "Contraste": 15.0,
-        "Saturacion": 10.0,
+        "Saturación": 10.0,
         "Exposicion": -4.0,
         "Ganancia": 32.0,
         "Foco": -1.0,
@@ -44,7 +44,7 @@
     "Cine_Drama": {
         "Brillo": -5.0,
         "Contraste": 25.0,
-        "Saturacion": 5.0,
+        "Saturación": 5.0,
         "Exposicion": -6.0,
         "Ganancia": 10.0,
         "Foco": -1.0,
@@ -65,7 +65,7 @@
     "Vibrant_Pro": {
         "Brillo": 5.0,
         "Contraste": 18.0,
-        "Saturacion": 25.0,
+        "Saturación": 25.0,
         "Exposicion": -4.0,
         "Ganancia": 20.0,
         "Foco": -1.0,
@@ -86,7 +86,7 @@
     "Noir_B&W": {
         "Brillo": 2.0,
         "Contraste": 35.0,
-        "Saturacion": 0.0,
+        "Saturación": 0.0,
         "Exposicion": -5.0,
         "Ganancia": 40.0,
         "Foco": -1.0,

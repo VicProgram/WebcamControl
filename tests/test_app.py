@@ -36,6 +36,7 @@ class TestInit:
         mocker.patch("customtkinter.CTkFrame", return_value=MagicMock())
         mocker.patch("customtkinter.CTkLabel", return_value=MagicMock())
         mocker.patch("customtkinter.CTkButton", return_value=MagicMock())
+        mocker.patch("customtkinter.CTkSlider", return_value=MagicMock())
         mocker.patch("customtkinter.CTkEntry", return_value=MagicMock())
         mocker.patch("customtkinter.CTkScrollableFrame", return_value=MagicMock())
         mocker.patch("customtkinter.CTkFont", return_value=MagicMock())
