@@ -1,64 +1,61 @@
-# ── Configuración del entorno virtual ────────────────────────────
-VENV        = venv
-MAIN        = webcam_control.py
-REQS        = requirements.txt
+# ── Environment ───────────────────────────────────────────────────
+VENV   ?= .venv
+MAIN    = webcam_control.py
 
-# Detectar OS: en Windows usar Scripts/, en Unix usar bin/
 ifeq ($(OS),Windows_NT)
-    PYTHON  = $(VENV)/Scripts/python
-    PIP     = $(VENV)/Scripts/pip
-    RUFF    = $(VENV)/Scripts/ruff
+    BOOTSTRAP = python
+    PYTHON    = $(VENV)/Scripts/python.exe
+    PIP       = $(VENV)/Scripts/pip.exe
+    RUFF      = $(VENV)/Scripts/ruff.exe
 else
-    PYTHON  = $(VENV)/bin/python3
-    PIP     = $(VENV)/bin/pip
-    RUFF    = $(VENV)/bin/ruff
+    BOOTSTRAP = python3
+    PYTHON    = $(VENV)/bin/python
+    PIP       = $(VENV)/bin/pip
+    RUFF      = $(VENV)/bin/ruff
 endif
 
-# ══════════════════════════════════════════════════════════════════
+.PHONY: all install run test lint fmt coverage ci clean fclean re
+
 all: install run
 
-# Crea el entorno virtual si no existe
-venv:
-	@if [ ! -d "$(VENV)" ]; then \
-		echo "Creando entorno virtual..."; \
-		python3 -m venv $(VENV); \
-	fi
+# Create the virtual environment (only once)
+$(VENV):
+	$(BOOTSTRAP) -m venv $(VENV)
 
-# Instala dependencias
-install: venv
-	@echo "Instalando dependencias..."
+# Install runtime + development dependencies (editable)
+install: $(VENV)
 	$(PIP) install --upgrade pip --quiet
-	$(PIP) install -r $(REQS) --quiet
+	$(PIP) install -e ".[dev]" --quiet
 
-# Ejecuta la aplicación
-run: venv
+# Launch the application
+run: install
 	$(PYTHON) $(MAIN)
 
-# Limpia archivos temporales y el entorno virtual
+# Run the test suite (headless: Tk and OpenCV are mocked)
+test: install
+	$(PYTHON) -m pytest
+
+# Static checks
+lint: install
+	$(RUFF) check .
+	$(RUFF) format --check .
+
+# Auto-format and auto-fix
+fmt: install
+	$(RUFF) format .
+	$(RUFF) check --fix .
+
+# Tests with coverage report
+coverage: install
+	$(PYTHON) -m pytest --cov=webcam_control --cov-report=term-missing
+
+# What CI runs
+ci: lint test
+
 clean:
-	@echo "Limpiando archivos temporales..."
-	find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
-	find . -name "*.pyc" -delete
-	rm -rf $(VENV)
+	$(BOOTSTRAP) -c "import pathlib, shutil; [shutil.rmtree(p, ignore_errors=True) for p in ['.pytest_cache', '.ruff_cache', '.mypy_cache', 'htmlcov', '__pycache__', 'tests/__pycache__']]; [p.unlink(missing_ok=True) for p in ['.coverage', 'coverage.xml']]"
 
-# Ejecuta el linter
-lint: venv
-	$(PIP) install -q ruff
-	$(RUFF) check $(MAIN)
-	$(RUFF) format --check $(MAIN)
+fclean: clean
+	$(BOOTSTRAP) -c "import shutil; shutil.rmtree('$(VENV)', ignore_errors=True)"
 
-# Aplica formato automático
-fmt: venv
-	$(PIP) install -q ruff
-	$(RUFF) format $(MAIN)
-	$(RUFF) check --fix $(MAIN)
-
-# Ejecuta los tests
-test: venv
-	$(PIP) install -q pytest pytest-mock
-	$(PYTHON) -m pytest tests/ -v --tb=short
-
-# Reinicia desde cero
-re: clean all
-
-.PHONY: all venv install run clean re lint fmt test
+re: fclean all
