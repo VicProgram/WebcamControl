@@ -522,6 +522,11 @@ class WebcamApp(ctk.CTk):
         self.destroy()
 
 
-if __name__ == "__main__":
+def main() -> None:
+    """Launch the WebcamControl desktop application."""
     app = WebcamApp()
     app.mainloop()
+
+
+if __name__ == "__main__":
+    main()

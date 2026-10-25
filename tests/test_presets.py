@@ -155,6 +155,8 @@ class TestRefrescarLista:
         app._refrescar_lista_presets()
         assert mock_gui["frame_mock"].pack.call_count > 0
 
-    def test_refrescar_sin_presets_muestra_mensaje(self, app, temp_dir: Path) -> None:
+    def test_refrescar_sin_presets_muestra_mensaje(self, app, temp_dir: Path, mocker) -> None:
+        label = mocker.patch("customtkinter.CTkLabel")
         app._refrescar_lista_presets()
-        assert app.lista_frame.pack.called or True
+        texts = [call.kwargs.get("text") for call in label.call_args_list]
+        assert "No hay presets guardados" in texts
