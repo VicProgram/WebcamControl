@@ -1,5 +1,5 @@
+# Runtime dependencies.
+# For development tools (pytest, ruff, coverage) use: pip install -e ".[dev]"
 opencv-python>=4.8.0
 customtkinter>=5.2.0
-ruff>=0.15.0
-pytest>=8.0.0
-pytest-mock>=3.14.0
+Pillow>=10.0.0
