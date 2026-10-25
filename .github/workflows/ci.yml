@@ -26,10 +26,12 @@ jobs:
           python-version: ${{ matrix.python-version }}
           enable-cache: true
 
-      - name: Install OpenCV system libraries
+      - name: Install system libraries
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libgl1 libglib2.0-0
+          # libgl1/libglib2.0-0: OpenCV runtime
+          # python3-tk: provides Tcl/Tk shared libraries used by uv-managed Python
+          sudo apt-get install -y --no-install-recommends libgl1 libglib2.0-0 python3-tk
 
       - name: Install project
         run: uv sync --extra dev
