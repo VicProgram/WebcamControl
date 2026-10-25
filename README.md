@@ -1,303 +1,200 @@
-
-# **\. Visión general del proyecto**
-
-WebcamControl es una aplicación de escritorio escrita en Python que te permite controlar los parámetros de imagen de tu webcam, guardar configuraciones como presets, ver la imagen en tiempo real y tomar fotos directamente desde la interfaz.
-
-**Archivos del proyecto:**
-
-* webcam\_control.py — Código principal (interfaz + lógica, todo en uno)
-
-* presets.json — Base de datos de presets guardados (se crea automáticamente la primera vez que guardas uno)
-
-* Fotos/ — Carpeta donde se guardan las fotos y videos (se crea automáticamente)
-
-* pyproject.toml — Configuración del proyecto y del linter (ruff)
-
-* Makefile — Automatización: crear el entorno virtual, instalar dependencias, ejecutar, lint
-
-| El único archivo que necesitas ejecutar es webcam\_control.py. El resto se gestiona solo. |
-| :---- |
-
-# **\. Dependencias y tecnologías usadas**
-
-El programa usa Python 3.10+ con las siguientes librerías:
-
-| Librería | Módulo | Para qué sirve |
-| :---- | :---- | :---- |
-| opencv-python | cv2 | Acceder a la cámara, leer frames, guardar imágenes y video |
-| customtkinter | ctk | Interfaz gráfica moderna con tema oscuro |
-| threading | (estándar Python) | Ejecutar la captura de video en un hilo paralelo |
-| json | (estándar Python) | Leer y escribir el archivo de presets |
-| os | (estándar Python) | Gestionar rutas de archivos y carpetas |
-| datetime | (estándar Python) | Generar nombres únicos con marca de tiempo para fotos y videos |
-| ruff | (dev) | Linter y formateador de código |
-
-# **\. Estructura del código**
-
-El código está organizado en una clase principal y dos diccionarios de constantes globales, todo en un único archivo `webcam_control.py`.
-
-## ** Constantes globales (fuera de la clase)**
-
-### **PROPS\_PRESET**
-
-Diccionario con los 19 parámetros de cámara que se guardan en cada preset. La clave es el nombre legible y el valor es la constante numérica de OpenCV.
-
-|   |
-| :---- |
-| PROPS\_PRESET \= { |
-|     "Brillo":     cv2.CAP\_PROP\_BRIGHTNESS, |
-|     "Contraste":  cv2.CAP\_PROP\_CONTRAST, |
-|     "Saturacion": cv2.CAP\_PROP\_SATURATION, |
-|     \# ... 16 más |
-| } |
-|   |
-
-| ¿Por qué fuera de la clase? Para que sea una constante global reutilizable tanto por la UI como por el sistema de guardado, sin necesidad de pasar self por todos lados. |
-| :---- |
-
-### **PROPS\_UI**
-
-Subconjunto de solo 5 parámetros que se muestran en pantalla (Brillo, Contraste, Saturacion, Exposicion, Ganancia). Mantener la UI limpia y no colapsar la ventana con los 19 parámetros completos.
-
-## ** La clase WebcamApp**
-
-Toda la lógica vive dentro de esta clase. Se instancia una sola vez al arrancar el programa.
-
-| Método | Qué hace |
-| :---- | :---- |
-| \_\_init\_\_ | Inicializa la cámara, define variables de estado y construye la UI |
-| \_build\_ui() | Construye toda la interfaz gráfica: labels, botones, separadores y secciones |
-| actualizar\_labels() | Lee los 5 valores de PROPS\_UI de la cámara y los muestra en pantalla |
-| abrir\_panel\_nativo() | Abre el cuadro de propiedades DirectShow de Windows para ajustes avanzados |
-| toggle\_preview() | Activa o para el preview: lanza el hilo secundario y el loop de display |
-| \_loop\_preview() | Hilo secundario: captura frames continuamente y los guarda en self.\_frame\_actual |
-| \_actualizar\_preview() | Hilo principal (via self.after): muestra el frame en la ventana de OpenCV |
-| elegir\_carpeta() | Abre el selector de carpetas y actualiza self.carpeta\_fotos |
-| tomar\_foto() | Guarda el frame actual (o captura uno nuevo) como .jpg con timestamp |
-| guardar() | Lee los 19 valores de PROPS\_PRESET y los escribe en presets.json |
-| \_cargar\_preset(nombre) | Lee presets.json y aplica cada valor a la cámara, omitiendo los no soportados (-1) |
-| \_borrar\_preset(nombre) | Elimina un preset del archivo después de confirmar |
-
-# **\. Cómo funciona el preview en tiempo real**
-
-El preview fue el reto más delicado del proyecto. En Windows, OpenCV no puede mostrar imágenes desde un hilo secundario de forma fiable (conflicto con DirectShow). La solución usa dos hilos con responsabilidades separadas:
-
-| Regla de oro: solo el hilo principal puede actualizar la UI. El hilo secundario solo toca datos. |
-| :---- |
-
-## **Hilo secundario — \_loop\_preview()**
-
-Su único trabajo es leer frames de la cámara lo más rápido posible y guardar el último en self.\_frame\_actual. No muestra nada, no llama a cv2.waitKey().
-
-|   |
-| :---- |
-| def \_loop\_preview(self): |
-|     while self.preview\_activo: |
-|         ret, frame \= self.cap.read()   \# lee un frame de la cámara |
-|         if ret: |
-|             with self.\_lock\_frame: |
-|                 self.\_frame\_actual \= frame  \# guarda el último frame bajo lock |
-|   |
-
-## **Hilo principal — \_actualizar\_preview()**
-
-Usa self.after(30, ...) para programarse a sí mismo cada 30 ms (\~33 fps). Cada vez que se ejecuta, coge el frame guardado y lo muestra con cv2.imshow(). Como corre en el hilo principal de Tkinter, no hay conflictos con Windows. También procesa cv2.waitKey(1) aquí para detectar la tecla 'q'.
-
-|   |
-| :---- |
-| def \_actualizar\_preview(self): |
-|     if self.preview\_activo: |
-|         with self.\_lock\_frame: |
-|             frame \= self.\_frame\_actual.copy() if self.\_frame\_actual else None |
-|         if frame is not None: |
-|             cv2.imshow('Webcam Control Live View', frame) |
-|         if cv2.waitKey(1) & 0xFF \== ord('q'): |
-|             self.toggle\_preview() |
-|             return |
-|         self.after(30, self.\_actualizar\_preview) |
-|     else: |
-|         cv2.destroyAllWindows() |
-|   |
-
-| self.after(30, función) es como un setTimeout en JavaScript: ejecuta la función después de 30 ms en el hilo principal. Es la forma correcta de hacer loops en Tkinter. |
-| :---- |
-
-# **\. Sistema de presets**
-
-## **Estructura del archivo presets.json**
-
-Cada preset es una clave en el JSON con los 19 valores numéricos que la cámara reportó en ese momento:
-
-|   |
-| :---- |
-| { |
-|     "Normal": { |
-|         "Brillo": 0.0, |
-|         "Contraste": 15.0, |
-|         "Saturacion": 10.0, |
-|         "Exposicion": \-4.0, |
-|         "Ganancia": 32.0, |
-|         "Foco": \-1.0,          \# no soportado por esta cámara |
-|         ... |
-|     }, |
-|     "Vibrant\_Pro": { |
-|         ... |
-|     } |
-| } |
-|   |
-
-## **¿Por qué se guardan los \-1?**
-
-Cuando una propiedad no está soportada por tu cámara, OpenCV devuelve \-1. Se guardan en el JSON para tener un registro completo, pero al **cargar** un preset el código los salta automáticamente:
-
-|   |
-| :---- |
-| for nombre\_prop, val in presets\[nombre\].items(): |
-|     if val \== \-1: |
-|         omitidos \+= 1 |
-|         continue          \# esta propiedad no la soporta la cámara |
-|     self.cap.set(PROPS\_PRESET\[nombre\_prop\], val)   \# aplicamos el valor |
-|     aplicados \+= 1 |
-|   |
-
-| Esto hace que los presets sean portables entre cámaras: si cargas un preset en otra webcam, simplemente se omiten las propiedades que esa cámara no tenga. |
-| :---- |
-
-# **\. Captura de fotos y video**
-
-## **Fotos**
-
-El botón 📷 Tomar Foto funciona en dos modos dependiendo de si el preview está activo:
-
-* Con preview activo: usa self.\_frame\_actual.copy() — el frame que ya está en memoria. Es instantáneo y coherente con lo que ves en pantalla.
-
-* Sin preview activo: llama a self.cap.read() para capturar un frame en ese momento.
-
-Las fotos se guardan con timestamp para evitar colisiones de nombre:
-
-|   |
-| :---- |
-| timestamp \= datetime.now().strftime('%Y%m%d\_%H%M%S') |
-| nombre\_archivo \= f'foto\_{timestamp}.jpg' |
-| \# Resultado: foto\_20260409\_143022.jpg |
-|   |
-
-La carpeta por defecto es Fotos/ dentro del directorio del proyecto. El botón **Cambiar** abre el explorador para elegir cualquier otra ruta.
-
-## **Video**
-
-El botón ⏺ Iniciar grabación graba video en formato MP4. Requiere que el preview esté activo. Se detiene con el mismo botón y guarda el archivo en la misma carpeta de fotos.
-
-# **\. Compatibilidad con webcams**
-
-El programa funciona con cualquier webcam estándar en Windows y Linux. En Windows usa el backend DirectShow (cv2.CAP\_DSHOW); en Linux usa el backend por defecto (cv2.CAP\_ANY).
-
-|   |
-| :---- |
-| backend \= cv2.CAP\_DSHOW if IS\_WINDOWS else cv2.CAP\_ANY |
-| self.cap \= cv2.VideoCapture(0, backend) |
-|   |
-
-| Parámetro | Descripción | Cuándo usarlo |
-| :---- | :---- | :---- |
-| Brillo | Luminosidad general de la imagen | Entornos oscuros o demasiado brillantes |
-| Contraste | Diferencia entre zonas claras y oscuras | Mejorar legibilidad en fondos planos |
-| Saturacion | Intensidad de los colores | Colores más vivos o aspecto neutro/gris |
-| Exposicion | Tiempo que el sensor recibe luz | Entornos con poca luz (valores negativos \= más oscuro) |
-| Ganancia | Amplificación de la señal del sensor | Alternativa a la exposición, más ruido |
-| Nitidez | Realce de bordes | Mejorar definición de texto o detalles |
-| Gamma | Curva de luminosidad | Corregir aspecto lavado o demasiado oscuro |
-| Temperatura de color | Tono cálido/frío de los blancos | Ajustar balance de blancos manualmente |
-| Auto\_Exposicion | 0.25 \= manual, 0.75 \= auto | Fijar en manual para que los presets funcionen bien |
-| Auto\_Foco | 0 \= manual, 1 \= automático | Desactivar para que el foco guardado se respete |
-
-| Importante: para que los presets funcionen correctamente, Auto\_Exposicion y Auto\_Foco deben estar en modo manual (0.25 y 0 respectivamente). El programa los fija así al arrancar. |
-| :---- |
-
-# **8\. Primeros pasos**
-
-## **Usando Make (recomendado)**
-
-|   |
-| :---- |
-| make install   \# crea el entorno virtual e instala dependencias |
-| make run       \# ejecuta la aplicación |
-| make lint      \# ejecuta el linter (ruff) |
-| make fmt       \# formatea el código automáticamente |
-| make clean     \# elimina el entorno virtual y archivos temporales |
-|   |
-
-## **Usando Make (Windows)**
-
-|   |
-| :---- |
-| make install |
-| make run |
-|   |
-
-## **Manual (sin Make)**
-
-|   |
-| :---- |
-| python3 \-m venv venv |
-| source venv/bin/activate  \# Linux/macOS |
-| .\\venv\\Scripts\\Activate.ps1  \# Windows |
-| pip install \-r requirements.txt |
-| python webcam\_control.py |
-|   |
-
-# **\. Crear un ejecutable para Windows**
-
-Con PyInstaller puedes empaquetar todo el proyecto en un único .exe que funciona en cualquier Windows sin necesidad de tener Python instalado.
-
-## **Pasos**
-
-* Asegúrate de tener el entorno virtual activo (verás (venv) en el terminal)
-
-* Instala PyInstaller:
-
-|   |
-| :---- |
-| pip install pyinstaller |
-|   |
-
-* Genera el ejecutable desde la carpeta del proyecto:
-
-|   |
-| :---- |
-| pyinstaller \--onefile \--noconsole webcam\_control.py |
-|   |
-| \# \--onefile   : todo en un solo .exe (más fácil de distribuir) |
-| \# \--noconsole : no aparece la ventana negra de terminal al abrir |
-|   |
-
-* El .exe aparece en la carpeta dist/ dentro de tu proyecto
-
-| Resultado: dist\\webcam\_control.exe — cópialo a cualquier Windows y funciona. No necesita Python, ni librerías, ni nada instalado. |
-| :---- |
-
-## **Notas sobre el ejecutable**
-
-* La primera vez que arranque puede tardar unos segundos mientras se descomprime en memoria.
-
-* Si cambias el código necesitas volver a ejecutar el comando de PyInstaller.
-
-* Las carpetas build/ y dist/ que genera PyInstaller no necesitas subirlas a ningún lado, son temporales.
-
-* El presets.json y la carpeta Fotos/ se crean junto al .exe cuando lo uses por primera vez.
-
-# **\. Referencia rápida de uso**
-
-| Acción | Cómo hacerlo |
-| :---- | :---- |
-| Ver valores actuales | Botón 'Leer valores' |
-| Ver la cámara en vivo | Botón '▶ Iniciar preview' → se abre ventana OpenCV |
-| Parar el preview | Botón '⏹ Detener preview' o pulsar Q en la ventana de video |
-| Ajuste avanzado nativo (Windows) | Botón 'Abrir configuración avanzada' → panel de la cámara |
-| Guardar preset | Escribe un nombre y pulsa '💾 Guardar preset actual' |
-| Cargar preset | Haz clic en el nombre del preset en la lista |
-| Borrar preset | Haz clic en el botón × junto al preset |
-| Cambiar carpeta de fotos | Botón 'Cambiar' junto a la ruta de carpeta |
-| Tomar foto | Botón '📷 Tomar foto' (con o sin preview activo) |
-| Grabar video | Botón '⏺ Iniciar grabación' (requiere preview activo) |
-| Cambiar cámara | Cambiar el 0 por 1, 2... en cv2.VideoCapture(0, ...) dentro del código |
+<p align="center">
+  <img src="docs/screenshot.png" alt="WebcamControl desktop app" width="720">
+</p>
+
+<h1 align="center">WebcamControl</h1>
+
+<p align="center">
+  <strong>A desktop control panel for your webcam.</strong><br>
+  Tune the image live, save 19-property presets, and capture photos or video.
+</p>
+
+<p align="center">
+  <a href="https://github.com/VicProgram/WebcamControl/actions/workflows/ci.yml"><img src="https://github.com/VicProgram/WebcamControl/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <img src="https://img.shields.io/badge/python-3.10%2B-blue" alt="Python 3.10+">
+  <img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License">
+  <img src="https://img.shields.io/badge/style-ruff-261230" alt="Ruff">
+</p>
+
+---
+
+**WebcamControl** is a small Python desktop application that puts the webcam
+properties buried in your camera driver behind a clean, dark UI. It shows a
+live preview, lets you adjust the five settings that matter most, stores the
+full configuration as reusable JSON presets, and writes photos and MP4 videos
+to the folder you choose.
+
+The screenshot above is the real application running with a synthetic test
+frame, so it can be reproduced without a physical webcam.
+
+## Why this exists
+
+Most webcams expose brightness, contrast, saturation, exposure, gain, focus,
+white balance and a dozen more properties through OpenCV, but no usable
+interface to change them. OBS is overkill for a quick call, and the vendor
+utilities are Windows-only or bundled with bloatware. This project is the
+missing control panel: one window, live feedback, presets that survive a
+reboot.
+
+## Features
+
+- **Live preview** — frames are captured on a background thread, so the UI
+  never freezes.
+- **Five quick controls** — brightness, contrast, saturation, exposure and
+  gain, with live values and automatic clamping to each camera's range.
+- **19-property presets** — save the whole camera state to `presets.json`,
+  reload it with one click, delete what you no longer need.
+- **Native advanced panel** — on Windows, opens the DirectShow properties
+  dialog for the settings the UI does not expose.
+- **Photo capture** — saves a timestamped JPEG from the current frame (or a
+  fresh one if the preview is off).
+- **Video recording** — MP4 at 20 FPS, with a red REC indicator in the
+  preview.
+- **Custom output folder** — photos and videos can live anywhere.
+- **Dark, responsive UI** — built with CustomTkinter; resizable and
+  high-DPI friendly.
+
+## Tech stack
+
+| Layer | Technology |
+|---|---|
+| Language | Python 3.10+ |
+| Camera I/O | OpenCV (`cv2.VideoCapture`, `VideoWriter`) |
+| UI | CustomTkinter + Tkinter |
+| Images | Pillow |
+| Quality | pytest, pytest-mock, pytest-cov, ruff |
+| CI | GitHub Actions (Python 3.10 and 3.12) |
+
+## Quick start
+
+```bash
+git clone https://github.com/VicProgram/WebcamControl.git
+cd WebcamControl
+make install
+make run
+```
+
+Or without Make:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
+pip install -e ".[dev]"
+python webcam_control.py
+```
+
+> **Camera permission:** on Windows, allow desktop apps to access the camera
+> (Settings → Privacy → Camera). On macOS, grant camera access to Terminal or
+> your IDE the first time you run the app.
+
+## Usage
+
+1. **Preview** — press *Iniciar preview*. The capture thread starts and the
+   frame appears in the left panel.
+2. **Tune** — move the sliders. Each change is applied to the camera
+   immediately and reflected in the preview.
+3. **Save a preset** — type a name and press *Guardar preset actual*. All 19
+   properties are stored; values the camera does not support are saved as
+   `-1` and skipped when loading.
+4. **Capture** — *Tomar foto* saves a JPEG. *Iniciar grabación* records an MP4
+   (preview must be active).
+5. **Choose a folder** — *Cambiar* next to the output path.
+
+Everything is written to `Fotos/` by default, next to `webcam_control.py`.
+
+## How it works
+
+```mermaid
+flowchart LR
+    UI["CustomTkinter UI<br/>(main thread)"] -->|toggle preview| T["Capture thread"]
+    T -->|read frames| CAM[("Webcam<br/>OpenCV")]
+    T -->|lock| F["Latest frame"]
+    F -->|"after(30 ms)"| UI
+    UI -->|"save / load"| P[("presets.json")]
+    UI -->|"photo / video"| OUT[("Fotos/")]
+```
+
+The UI and the capture loop never touch the same frame at the same time: the
+worker writes under a `threading.Lock`, and the main thread copies it under the
+same lock before converting it to a `CTkImage`. Display updates are scheduled
+with Tk's `after()`, which keeps all widget calls on the main thread.
+
+## Presets format
+
+`presets.json` is a plain object: preset name → camera property → value.
+
+```json
+{
+    "Normal": {
+        "Brillo": 0.0,
+        "Contraste": 15.0,
+        "Saturación": 10.0,
+        "Exposicion": -4.0,
+        "Ganancia": 32.0,
+        "Foco": -1.0,
+        "Zoom": -1.0
+    }
+}
+```
+
+The file ships with a `Normal` preset as an example. A value of `-1` means
+"not supported by this camera" and is skipped on load.
+
+## Tests and quality
+
+```bash
+make lint       # ruff check + format check
+make test       # 71 tests, no webcam required
+make coverage   # coverage report
+make ci         # what GitHub Actions runs
+```
+
+The suite mocks Tkinter, CustomTkinter and OpenCV, so it runs headless in CI.
+It covers preset persistence, error paths, preview threading, recording, photo
+capture and window shutdown. Current line coverage: **95%**.
+
+## Project structure
+
+```
+.
+├── webcam_control.py        # application (UI + camera logic)
+├── presets.json             # example preset database
+├── tests/
+│   ├── conftest.py          # Tk/OpenCV mocks and fixtures
+│   ├── test_app.py          # UI, preview, recording, photo capture
+│   └── test_presets.py      # preset load/save/delete
+├── docs/
+│   ├── screenshot.png
+│   ├── GUIA_TECNICA.es.md   # detailed Spanish technical guide
+│   └── ROADMAP.es.md        # ideas and pending improvements
+├── .github/workflows/ci.yml
+├── Makefile
+├── pyproject.toml
+└── LICENSE
+```
+
+## Compatibility
+
+| Platform | Preview / presets / capture | Native advanced panel |
+|---|---|---|
+| Windows 10/11 | Yes (DirectShow) | Yes |
+| Linux | Yes (V4L2) | No |
+| macOS | Yes (AVFoundation) | No |
+
+Some cameras expose only a subset of the 19 properties. The app reads each
+value first and marks unsupported ones as `No soportado` instead of sending an
+invalid setting.
+
+## Roadmap
+
+See [`docs/ROADMAP.es.md`](docs/ROADMAP.es.md) for the full list. Highlights:
+reuse the `CTkImage` between frames, add a camera selector, fix the preview
+aspect ratio, and add keyboard shortcuts.
+
+## License
+
+MIT © 2026 Victor Abad Romero. See [`LICENSE`](LICENSE).
+
+---
+
+<sub>Documentación técnica detallada en español: [`docs/GUIA_TECNICA.es.md`](docs/GUIA_TECNICA.es.md).</sub>
